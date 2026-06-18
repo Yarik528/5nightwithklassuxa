@@ -31,7 +31,7 @@ function playSound(name) {
 }
 
 // === МУЛЬТИПЛЕЕР ===
-const SERVER_URL = 'https://5nightwithklassuxa.yarik528.repl.co'; // ТВОЙ URL С REPLIT!
+const SERVER_URL = 'https://5bb4cbfa-2c6d-4594-9e0e-a390b02aad22-00-1vfzoka5fshcd.sisko.replit.dev/'; // ТВОЙ URL С REPLIT!
 let socket = null;
 let isConnected = false;
 let currentRoom = '';

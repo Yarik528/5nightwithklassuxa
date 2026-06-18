@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>5 Ночей с Классухой</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- МУЛЬТИПЛЕЕР МЕНЮ -->
+    <div id="multiplayer-menu" class="menu-screen">
+        <h1 class="game-title">5 НОЧЕЙ С КЛАССУХОЙ</h1>
+        <div class="menu-buttons">
+            <input type="text" id="room-input" placeholder="Название комнаты" value="room1" 
+                   style="padding: 15px; font-size: 18px; font-family: 'Press Start 2P'; margin-bottom: 20px; width: 300px; text-align: center;">
+            <button class="menu-btn" id="join-room-btn">🚪 ВОЙТИ В КОМНАТУ</button>
+            <button class="menu-btn" id="create-room-btn">➕ СОЗДАТЬ КОМНАТУ</button>
+            <button class="menu-btn" id="play-single-btn">👤 ОДИНОЧНАЯ ИГРА</button>
+        </div>
+        <div id="connection-status" style="color: #f00; margin-top: 20px; font-size: 14px;">⏳ Подключение...</div>
+    </div>
+
+    <!-- ГЛАВНОЕ МЕНЮ -->
+    <div id="main-menu" class="menu-screen hidden">
+        <h1 class="game-title">5 НОЧЕЙ С КЛАССУХОЙ</h1>
+        <div class="menu-buttons">
+            <button class="menu-btn" id="new-game-btn">🎮 НОВАЯ ИГРА</button>
+            <button class="menu-btn" id="continue-btn">▶️ ПРОДОЛЖИТЬ</button>
+            <button class="menu-btn" id="night-select-btn">📅 ВЫБОР НОЧИ</button>
+            <button class="menu-btn" id="custom-night-btn">😈 КАСТОМНАЯ НОЧЬ</button>
+        </div>
+        <div class="menu-footer"><p>🐱 Кот ждёт тебя...</p></div>
+    </div>
+
+    <!-- ВЫБОР НОЧИ -->
+    <div id="night-select-menu" class="menu-screen hidden">
+        <h2 class="menu-title">ВЫБЕРИ НОЧЬ</h2>
+        <div class="night-buttons">
+            <button class="night-btn" data-night="1">НОЧЬ 1<br><small>Легко</small></button>
+            <button class="night-btn locked" data-night="2">НОЧЬ 2<br><small>Нормально</small></button>
+            <button class="night-btn locked" data-night="3">НОЧЬ 3<br><small>Сложно</small></button>
+            <button class="night-btn locked" data-night="4">НОЧЬ 4<br><small>Очень сложно</small></button>
+            <button class="night-btn locked" data-night="5">НОЧЬ 5<br><small>КОШМАР</small></button>
+        </div>
+        <button class="menu-btn back-btn" id="back-to-menu-1">⬅️ НАЗАД</button>
+    </div>
+
+    <!-- КАСТОМНАЯ НОЧЬ -->
+    <div id="custom-night-menu" class="menu-screen hidden">
+        <h2 class="menu-title">КАСТОМНАЯ НОЧЬ</h2>
+        <div class="custom-settings">
+            <label>Скорость классухи: <span id="speed-val">5</span></label>
+            <input type="range" id="speed-slider" min="1" max="20" value="5">
+            <label>Начальная энергия: <span id="power-val">100</span>%</label>
+            <input type="range" id="power-slider" min="20" max="100" value="100">
+            <label>Голод кота: <span id="hunger-val">0</span></label>
+            <input type="range" id="hunger-slider" min="0" max="100" value="0">
+        </div>
+        <button class="menu-btn" id="start-custom-btn">▶️ НАЧАТЬ</button>
+        <button class="menu-btn back-btn" id="back-to-menu-2">⬅️ НАЗАД</button>
+    </div>
+
+    <!-- ИГРОВОЙ ЭКРАН -->
+    <div id="game-screen" class="hidden">
+        <div id="game-container">
+            <canvas id="game-canvas"></canvas>
+            <div id="ui-layer">
+                <div id="time-display">12:00 AM</div>
+                <div id="power-display">⚡ 100%</div>
+                <div id="night-display">НОЧЬ 1</div>
+                <div id="cat-status">🐱 КОТ: СЫТ</div>
+                <div id="multiplayer-indicator" style="position: absolute; top: 10px; left: 10px; font-size: 12px; color: #0f0;">🟢 Онлайн</div>
+            </div>
+            <div id="controls-left">
+                <button id="door-left-btn" class="control-btn">🚪 ДВЕРЬ</button>
+                <button id="light-left-btn" class="control-btn">💡 СВЕТ</button>
+            </div>
+            <div id="controls-right">
+                <button id="door-right-btn" class="control-btn">🚪 ДВЕРЬ</button>
+                <button id="light-right-btn" class="control-btn">💡 СВЕТ</button>
+            </div>
+            <div id="controls-center">
+                <button id="camera-btn" class="control-btn center">📹 КАМЕРЫ</button>
+                <button id="feed-cat-btn" class="control-btn center">🐱 КОТ</button>
+            </div>
+            <div id="camera-system" class="hidden">
+                <div id="camera-label">CAM 01 - КЛАСС</div>
+                <button id="exit-camera-btn" class="exit-btn">✖ ВЫЙТИ</button>
+                <div id="camera-map">
+                    <button class="cam-btn active" data-cam="0">CAM 01</button>
+                    <button class="cam-btn" data-cam="1">CAM 02</button>
+                    <button class="cam-btn" data-cam="2">CAM 03</button>
+                    <button class="cam-btn" data-cam="3">CAM 04</button>
+                </div>
+            </div>
+            <button id="menu-btn" class="menu-btn-small">☰ МЕНЮ</button>
+        </div>
+    </div>
+
+    <!-- ПАУЗА -->
+    <div id="pause-menu" class="menu-screen hidden">
+        <h2 class="menu-title">ПАУЗА</h2>
+        <button class="menu-btn" id="resume-btn">▶️ ПРОДОЛЖИТЬ</button>
+        <button class="menu-btn" id="restart-btn">🔄 В МЕНЮ</button>
+        <button class="menu-btn" id="quit-btn">🚪 ВЫЙТИ</button>
+    </div>
+
+    <!-- АДМИН ПАНЕЛЬ -->
+    <div id="admin-panel" class="hidden">
+        <div class="admin-content">
+            <h2>🛠️ АДМИН ПАНЕЛЬ</h2>
+            <div class="admin-section">
+                <h3>Сложность</h3>
+                <label>AI Скорость: <span id="admin-ai-val">5</span></label>
+                <input type="range" id="admin-ai-slider" min="0" max="20" value="5">
+                <label>Голод кота: <span id="admin-hunger-val">0</span></label>
+                <input type="range" id="admin-hunger-slider" min="0" max="100" value="0">
+            </div>
+            <div class="admin-section">
+                <h3>Ресурсы</h3>
+                <button class="admin-btn" id="admin-add-power">⚡ +50 Энергии</button>
+                <button class="admin-btn" id="admin-add-food">🍕 +5 Еды</button>
+                <button class="admin-btn" id="admin-full-feed">🐱 Накормить кота</button>
+            </div>
+            <div class="admin-section">
+                <h3>Управление</h3>
+                <button class="admin-btn danger" id="admin-kill"> Вызвать скример</button>
+                <button class="admin-btn success" id="admin-win">🏆 Победа (6 AM)</button>
+                <button class="admin-btn" id="admin-toggle-doors">🚪 Переключить двери</button>
+            </div>
+            <button class="admin-btn close-admin" id="close-admin-btn">❌ ЗАКРЫТЬ</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>

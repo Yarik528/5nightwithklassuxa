@@ -14,24 +14,64 @@ const rooms = {};
 io.on('connection', (socket) => {
     console.log('Игрок подключился:', socket.id);
     
-    socket.on('join-room', (roomId) => {
-        socket.join(roomId);
-        if (!rooms[roomId]) {
-            rooms[roomId] = {
-                players: [socket.id],
-                gameState: {
-                    power: 100, catHunger: 0, gameTime: 0,
-                    klassukhaPosition: 0, doorLeftClosed: false,
-                    doorRightClosed: false, aiSpeed: 1, foodInventory: 0
-                }
-            };
-            console.log(`Комната ${roomId} создана`);
+    socket.on('check-room', (data) => {
+        const { roomId } = data;
+        const room = rooms[roomId];
+        
+        if (room) {
+            socket.emit('room-exists', { 
+                exists: true, 
+                hasPassword: !!room.password,
+                playersCount: room.players.length 
+            });
         } else {
-            rooms[roomId].players.push(socket.id);
-            console.log(`Игрок ${socket.id} присоединился к ${roomId}`);
+            socket.emit('room-exists', { exists: false });
         }
-        socket.emit('game-state', rooms[roomId].gameState);
+    });
+    
+    socket.on('create-room', (data) => {
+        const { roomId, password } = data;
+        
+        if (rooms[roomId]) {
+            socket.emit('create-failed', { reason: 'Комната уже существует!' });
+            return;
+        }
+        
+        rooms[roomId] = {
+            players: [socket.id],
+            password: password || null,
+            gameState: {
+                power: 100, catHunger: 0, gameTime: 0,
+                klassukhaPosition: 0, doorLeftClosed: false,
+                doorRightClosed: false, aiSpeed: 1, foodInventory: 0
+            }
+        };
+        
+        socket.join(roomId);
+        socket.emit('create-success', { roomId });
+        console.log(`Комната ${roomId} создана ${password ? '(с паролем)' : '(без пароля)'}`);
+    });
+    
+    socket.on('join-room', (data) => {
+        const { roomId, password } = data;
+        const room = rooms[roomId];
+        
+        if (!room) {
+            socket.emit('join-failed', { reason: 'Комната не найдена!' });
+            return;
+        }
+        
+        if (room.password && room.password !== password) {
+            socket.emit('join-failed', { reason: 'Неверный пароль!' });
+            return;
+        }
+        
+        socket.join(roomId);
+        room.players.push(socket.id);
+        
+        socket.emit('join-success', { roomId, gameState: room.gameState });
         socket.to(roomId).emit('player-joined', socket.id);
+        console.log(`Игрок ${socket.id} вошел в ${roomId}`);
     });
     
     socket.on('update-game', (data) => {

@@ -13,11 +13,23 @@
         <div class="menu-buttons">
             <input type="text" id="room-input" placeholder="Название комнаты" value="room1" 
                    style="padding: 15px; font-size: 18px; font-family: 'Press Start 2P'; margin-bottom: 20px; width: 300px; text-align: center;">
-            <button class="menu-btn" id="join-room-btn">🚪 ВОЙТИ В КОМНАТУ</button>
+            <input type="password" id="password-input" placeholder="Пароль (необязательно)" 
+                   style="padding: 15px; font-size: 18px; font-family: 'Press Start 2P'; margin-bottom: 20px; width: 300px; text-align: center;">
             <button class="menu-btn" id="create-room-btn">➕ СОЗДАТЬ КОМНАТУ</button>
+            <button class="menu-btn" id="join-room-btn">🚪 ВОЙТИ В КОМНАТУ</button>
             <button class="menu-btn" id="play-single-btn">👤 ОДИНОЧНАЯ ИГРА</button>
         </div>
+        <div id="room-info" style="color: #888; margin-top: 20px; font-size: 12px;"></div>
         <div id="connection-status" style="color: #f00; margin-top: 20px; font-size: 14px;">⏳ Подключение...</div>
+    </div>
+
+    <!-- МОДАЛКА ОШИБКИ -->
+    <div id="error-modal" class="modal-overlay hidden">
+        <div class="modal-box">
+            <h3 id="error-title">❌ ОШИБКА</h3>
+            <p id="error-text">Что-то пошло не так</p>
+            <button class="menu-btn" id="error-close-btn">OK</button>
+        </div>
     </div>
 
     <!-- ГЛАВНОЕ МЕНЮ -->
@@ -124,7 +136,7 @@
             </div>
             <div class="admin-section">
                 <h3>Управление</h3>
-                <button class="admin-btn danger" id="admin-kill"> Вызвать скример</button>
+                <button class="admin-btn danger" id="admin-kill">💀 Вызвать скример</button>
                 <button class="admin-btn success" id="admin-win">🏆 Победа (6 AM)</button>
                 <button class="admin-btn" id="admin-toggle-doors">🚪 Переключить двери</button>
             </div>

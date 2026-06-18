@@ -31,10 +31,11 @@ function playSound(name) {
 }
 
 // === МУЛЬТИПЛЕЕР ===
-const SERVER_URL = 'https://5bb4cbfa-2c6d-4594-9e0e-a390b02aad22-00-1vfzoka5fshcd.sisko.replit.dev/'; // ЗАМЕНИ НА СВОЙ URL!
+const SERVER_URL = 'https://5nightwithklassuxa.yarik528.repl.co'; // ТВОЙ URL С REPLIT!
 let socket = null;
 let isConnected = false;
-let currentRoom = 'room1';
+let currentRoom = '';
+let currentPassword = '';
 
 function connectToServer() {
     socket = io(SERVER_URL);
@@ -48,42 +49,76 @@ function connectToServer() {
     });
     
     socket.on('disconnect', () => {
-        console.log('❌ Отключено от сервера');
+        console.log(' Отключено от сервера');
         isConnected = false;
         document.getElementById('connection-status').textContent = '❌ Отключено';
         document.getElementById('connection-status').style.color = '#f00';
         document.getElementById('multiplayer-indicator').textContent = '🔴 Офлайн';
     });
     
+    socket.on('room-exists', (data) => {
+        const info = document.getElementById('room-info');
+        if (data.exists) {
+            info.textContent = `Комната найдена! ${data.hasPassword ? '🔒 С паролем' : ' Без пароля'} | 👥 ${data.playersCount} игроков`;
+            info.style.color = '#0f0';
+        } else {
+            info.textContent = 'Комната не существует - можно создать';
+            info.style.color = '#ff0';
+        }
+    });
+    
+    socket.on('create-success', (data) => {
+        console.log('✅ Комната создана:', data.roomId);
+        currentRoom = data.roomId;
+        startMultiplayerGame();
+    });
+    
+    socket.on('create-failed', (data) => {
+        showError('Не удалось создать', data.reason);
+    });
+    
+    socket.on('join-success', (data) => {
+        console.log('✅ Вошел в комнату:', data.roomId);
+        currentRoom = data.roomId;
+        if (data.gameState) Object.assign(gameState, data.gameState);
+        startMultiplayerGame();
+    });
+    
+    socket.on('join-failed', (data) => {
+        showError('Не удалось войти', data.reason);
+    });
+    
     socket.on('game-state', (state) => {
-        console.log('📥 Получено состояние игры:', state);
         Object.assign(gameState, state);
     });
     
     socket.on('game-updated', (state) => {
-        console.log('🔄 Игра обновлена:', state);
         Object.assign(gameState, state);
     });
     
     socket.on('player-joined', (playerId) => {
-        console.log('👤 Игрок присоединился:', playerId);
+        console.log(' Игрок присоединился:', playerId);
     });
     
     socket.on('player-left', (playerId) => {
-        console.log('👤 Игрок вышел:', playerId);
+        console.log(' Игрок вышел:', playerId);
     });
 }
 
-function joinRoom(roomId) {
-    if (socket) {
-        currentRoom = roomId;
-        socket.emit('join-room', roomId);
-        console.log(' Присоединился к комнате:', roomId);
-    }
+function startMultiplayerGame() {
+    document.getElementById('multiplayer-menu').classList.add('hidden');
+    document.getElementById('game-screen').classList.remove('hidden');
+    gameStarted = true;
+}
+
+function showError(title, text) {
+    document.getElementById('error-title').textContent = '❌ ' + title;
+    document.getElementById('error-text').textContent = text;
+    document.getElementById('error-modal').classList.remove('hidden');
 }
 
 function sendGameStateUpdate(updates) {
-    if (socket && isConnected) {
+    if (socket && isConnected && currentRoom) {
         socket.emit('update-game', {
             roomId: currentRoom,
             state: updates
@@ -417,27 +452,57 @@ document.addEventListener('keyup', (e) => {
     }
 });
 
-// Мультиплеер меню
-document.getElementById('join-room-btn').onclick = () => {
-    const roomId = document.getElementById('room-input').value;
-    joinRoom(roomId);
-    document.getElementById('multiplayer-menu').classList.add('hidden');
-    document.getElementById('game-screen').classList.remove('hidden');
-    gameStarted = true;
-};
+// === ОБРАБОТЧИКИ МЕНЮ ===
+document.getElementById('room-input').addEventListener('input', (e) => {
+    const roomId = e.target.value.trim();
+    if (roomId && socket && isConnected) {
+        socket.emit('check-room', { roomId });
+    }
+});
 
 document.getElementById('create-room-btn').onclick = () => {
-    const roomId = 'room-' + Math.random().toString(36).substr(2, 6);
-    document.getElementById('room-input').value = roomId;
-    joinRoom(roomId);
-    document.getElementById('multiplayer-menu').classList.add('hidden');
-    document.getElementById('game-screen').classList.remove('hidden');
-    gameStarted = true;
+    const roomId = document.getElementById('room-input').value.trim();
+    const password = document.getElementById('password-input').value;
+    
+    if (!roomId) {
+        showError('Ошибка', 'Введите название комнаты!');
+        return;
+    }
+    
+    if (!isConnected) {
+        showError('Ошибка', 'Нет соединения с сервером!');
+        return;
+    }
+    
+    currentPassword = password;
+    socket.emit('create-room', { roomId, password });
+};
+
+document.getElementById('join-room-btn').onclick = () => {
+    const roomId = document.getElementById('room-input').value.trim();
+    const password = document.getElementById('password-input').value;
+    
+    if (!roomId) {
+        showError('Ошибка', 'Введите название комнаты!');
+        return;
+    }
+    
+    if (!isConnected) {
+        showError('Ошибка', 'Нет соединения с сервером!');
+        return;
+    }
+    
+    currentPassword = password;
+    socket.emit('join-room', { roomId, password });
 };
 
 document.getElementById('play-single-btn').onclick = () => {
     document.getElementById('multiplayer-menu').classList.add('hidden');
     document.getElementById('main-menu').classList.remove('hidden');
+};
+
+document.getElementById('error-close-btn').onclick = () => {
+    document.getElementById('error-modal').classList.add('hidden');
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -495,7 +560,7 @@ document.getElementById('door-left-btn').onclick = function() {
     if (!gameStarted || gamePaused || gameState.power <= 0 || gameState.isGameOver) return;
     gameState.doorLeftClosed = !gameState.doorLeftClosed;
     playSound('door');
-    this.textContent = gameState.doorLeftClosed ? '🚪 ОТКРЫТЬ' : ' ДВЕРЬ';
+    this.textContent = gameState.doorLeftClosed ? '🚪 ОТКРЫТЬ' : '🚪 ДВЕРЬ';
     this.classList.toggle('active', gameState.doorLeftClosed);
     sendGameStateUpdate({ doorLeftClosed: gameState.doorLeftClosed });
 };
@@ -504,7 +569,7 @@ document.getElementById('door-right-btn').onclick = function() {
     if (!gameStarted || gamePaused || gameState.power <= 0 || gameState.isGameOver) return;
     gameState.doorRightClosed = !gameState.doorRightClosed;
     playSound('door');
-    this.textContent = gameState.doorRightClosed ? '🚪 ОТКРЫТЬ' : ' ДВЕРЬ';
+    this.textContent = gameState.doorRightClosed ? '🚪 ОТКРЫТЬ' : '🚪 ДВЕРЬ';
     this.classList.toggle('active', gameState.doorRightClosed);
     sendGameStateUpdate({ doorRightClosed: gameState.doorRightClosed });
 };

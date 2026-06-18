@@ -148,3 +148,40 @@ body { overflow: hidden; background: #000; font-family: 'Press Start 2P', cursiv
     border: 1px solid #444; cursor: pointer; z-index: 100;
 }
 #admin-toggle-btn:hover { color: #ff0; border-color: #ff0; }
+
+/* МОДАЛКА ОШИБКИ */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.85); z-index: 3000;
+    display: flex; justify-content: center; align-items: center;
+}
+.modal-overlay.hidden { display: none; }
+
+.modal-box {
+    background: #1a1a2e; border: 4px solid #f00; padding: 30px;
+    min-width: 400px; text-align: center;
+    font-family: 'Press Start 2P', cursive; color: #fff;
+}
+
+.modal-box h3 {
+    color: #f00; font-size: 24px; margin-bottom: 20px;
+    text-shadow: 2px 2px 0 #000;
+}
+
+.modal-box p {
+    color: #fff; font-size: 14px; margin-bottom: 30px;
+    line-height: 1.5;
+}
+
+.modal-box .menu-btn {
+    margin: 0 auto;
+}
+
+#room-input, #password-input {
+    background: #0a0a1a; color: #fff; border: 3px solid #555;
+    text-shadow: 2px 2px 0 #000;
+}
+
+#room-input:focus, #password-input:focus {
+    border-color: #ff0; outline: none;
+}

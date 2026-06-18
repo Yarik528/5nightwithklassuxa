@@ -31,7 +31,7 @@ function playSound(name) {
 }
 
 // === МУЛЬТИПЛЕЕР ===
-const SERVER_URL = 'https://klassukha-multiplayer.твой-username.repl.co'; // ЗАМЕНИ НА СВОЙ URL!
+const SERVER_URL = 'https://5bb4cbfa-2c6d-4594-9e0e-a390b02aad22-00-1vfzoka5fshcd.sisko.replit.dev/'; // ЗАМЕНИ НА СВОЙ URL!
 let socket = null;
 let isConnected = false;
 let currentRoom = 'room1';

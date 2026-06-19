@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TestApp</title>
+    <title>5 Nights with Klassukha</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -97,6 +97,7 @@
                 <div id="cat-status">🐱 КОТ: СЫТ</div>
                 <div id="multiplayer-indicator" style="position: absolute; top: 10px; left: 10px; font-size: 12px; color: #0f0;">🟢 Онлайн</div>
                 <div id="player-nickname-display" style="position: absolute; top: 10px; right: 10px; font-size: 12px; color: #ff0;">👤 Player1</div>
+                <div id="player-id-display" style="position: absolute; top: 35px; right: 10px; font-size: 12px; color: #0ff;">🆔 12345</div>
             </div>
             <div id="controls-left">
                 <button id="door-left-btn" class="control-btn">🚪 ДВЕРЬ</button>
@@ -177,6 +178,10 @@
                     </div>
                     <div class="admin-settings">
                         <h4>⚙️ НАСТРОЙКИ:</h4>
+                        <label>Твой ID: <span id="admin-current-id">12345</span></label>
+                        <input type="text" id="admin-custom-id" placeholder="Новый ID (например: im dev)" 
+                               style="padding: 8px; font-family: 'Press Start 2P'; font-size: 10px; width: 200px; margin: 5px 0;">
+                        <button class="admin-btn" id="admin-set-id-btn">💾 Сохранить ID</button>
                         <label>Сложность AI: <span id="admin-ai-val">5</span></label>
                         <input type="range" id="admin-ai-slider" min="1" max="20" value="5">
                         <label>Голод кота: <span id="admin-hunger-val">0</span></label>

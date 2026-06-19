@@ -10,7 +10,7 @@ const io = socketIo(server, {
 
 const PORT = process.env.PORT || 3000;
 const rooms = {};
-const ADMIN_PASSWORD = "admin123"; // МЕНЯЙ ПАРОЛЬ ЗДЕСЬ!
+const ADMIN_PASSWORD = "abubaga67"; // МЕНЯЙ ПАРОЛЬ ЗДЕСЬ!
 
 io.on('connection', (socket) => {
     console.log('Игрок подключился:', socket.id);

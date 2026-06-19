@@ -1,4 +1,4 @@
-// === НАСТРОЙКИ ===
+// === НАСТРОЙКИ И ПЕРЕМЕННЫЕ ===
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
@@ -30,14 +30,22 @@ function playSound(name) {
     }
 }
 
-// === МУЛЬТИПЛЕЕР И АДМИНКА ===
-const SERVER_URL = 'https://5bb4cbfa-2c6d-4594-9e0e-a390b02aad22-00-1vfzoka5fshcd.sisko.replit.dev/'; // ТВОЙ URL!
-let socket = null;
-let isConnected = false;
-let currentRoom = '';
 let myNickname = 'Player1';
+let myPlayerId = '';
 let isAdminAuthenticated = false;
 let currentAdminRoom = null;
+
+// Генерация ID при первом запуске
+function generatePlayerId() {
+    const saved = localStorage.getItem('playerId');
+    if (saved) {
+        myPlayerId = saved;
+    } else {
+        myPlayerId = Math.floor(10000 + Math.random() * 90000).toString();
+        localStorage.setItem('playerId', myPlayerId);
+    }
+}
+generatePlayerId();
 
 let gameState = {
     power: 100, doorLeftClosed: false, doorRightClosed: false,
@@ -49,7 +57,17 @@ let gameState = {
     isCooking: false, cookProgress: 0, cookTime: 100
 };
 
+// === МУЛЬТИПЛЕЕР И АДМИНКА ===
+const SERVER_URL = 'https://5bb4cbfa-2c6d-4594-9e0e-a390b02aad22-00-1vfzoka5fshcd.sisko.replit.dev/'; // ТВОЙ URL!
+let socket = null;
+let isConnected = false;
+let currentRoom = '';
+
 function connectToServer() {
+    // Обновляем отображение ID
+    document.getElementById('player-id-display').textContent = `🆔 ${myPlayerId}`;
+    document.getElementById('admin-current-id').textContent = myPlayerId;
+    
     socket = io(SERVER_URL);
     
     socket.on('connect', () => {
@@ -99,8 +117,6 @@ function connectToServer() {
         gameState = data.gameState;
         updateUI();
         const playersList = document.getElementById('players-list');
-        playersList.innerHTML = '';
-        // В реальном приложении сервер должен отдавать список ников, пока просто кол-во
         playersList.innerHTML = `<p style="color:#fff; font-size:10px;">В комнате: ${data.players} чел.</p>`;
     });
 
@@ -120,7 +136,7 @@ function connectToServer() {
     socket.on('room-exists', (data) => {
         const info = document.getElementById('room-info');
         if (data.exists) {
-            info.textContent = `Комната найдена! ${data.hasPassword ? '🔒 С паролем' : ' Без пароля'} | 👥 ${data.playersCount} игроков`;
+            info.textContent = `Комната найдена! ${data.hasPassword ? ' С паролем' : ' Без пароля'} | 👥 ${data.playersCount} игроков`;
             info.style.color = '#0f0';
         } else {
             info.textContent = 'Комната не существует - можно создать';
@@ -171,7 +187,6 @@ function selectAdminRoom(roomId) {
     socket.emit('admin-join-room', roomId);
     
     document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
-    // Простая подсветка (в идеале по ID)
     event.currentTarget.classList.add('active');
 }
 
@@ -180,23 +195,26 @@ function adminAction(action) {
     let updates = {};
     
     if (action === 'toggle-doors') updates = { doorLeftClosed: !gameState.doorLeftClosed, doorRightClosed: !gameState.doorRightClosed };
-    else if (action === 'jumpscare') { socket.emit('admin-command', { roomId: currentAdminRoom, action: 'trigger-jumpscare', nickname: myNickname }); return; }
+    else if (action === 'jumpscare') { 
+        socket.emit('admin-command', { roomId: currentAdminRoom, action: 'trigger-jumpscare', nickname: myNickname, playerId: myPlayerId }); 
+        return; 
+    }
     else if (action === 'win') updates = { gameTime: 59.9 };
     else if (action === 'add-power') updates = { power: Math.min(100, gameState.power + 50) };
     else if (action === 'feed-cat') updates = { catHunger: 0 };
     
-    socket.emit('update-game', { roomId: currentAdminRoom, state: updates, nickname: `[ADMIN] ${myNickname}` });
+    socket.emit('update-game', { roomId: currentAdminRoom, state: updates, nickname: `[ADMIN] ${myNickname}`, playerId: myPlayerId });
 }
 
 function sendGameStateUpdate(updates) {
     if (socket && isConnected && currentRoom) {
-        socket.emit('update-game', { roomId: currentRoom, state: updates, nickname: myNickname });
+        socket.emit('update-game', { roomId: currentRoom, state: updates, nickname: myNickname, playerId: myPlayerId });
     }
 }
 
 connectToServer();
 
-// === ПЕРЕМЕННЫЕ МЕНЮ ===
+// === МЕНЮ И ИГРА ===
 let currentNight = 1;
 let maxNightUnlocked = 1;
 let gameStarted = false;
@@ -231,7 +249,7 @@ function formatTime(min) {
 
 function updateUI() {
     timeDisplay.textContent = formatTime(gameState.gameTime);
-    powerDisplay.textContent = ` ${Math.floor(gameState.power)}%`;
+    powerDisplay.textContent = `⚡ ${Math.floor(gameState.power)}%`;
     if (gameState.catHunger < 30) {
         catStatus.textContent = `🐱 КОТ: СЫТ | 🍕 Еда: ${gameState.foodInventory}`;
         catStatus.style.color = '#0f0';
@@ -239,7 +257,7 @@ function updateUI() {
         catStatus.textContent = `🐱 КОТ: ГОЛОДЕН | 🍕 Еда: ${gameState.foodInventory}`;
         catStatus.style.color = '#fa0';
     } else {
-        catStatus.textContent = `🐱 КОТ: ОЧЕНЬ ГОЛОДЕН! |  Еда: ${gameState.foodInventory}`;
+        catStatus.textContent = `🐱 КОТ: ОЧЕНЬ ГОЛОДЕН! | 🍕 Еда: ${gameState.foodInventory}`;
         catStatus.style.color = '#f00';
     }
 }
@@ -297,7 +315,6 @@ function update() {
 }
 
 function drawBackground() {
-    // (Оставил твой старый код отрисовки без изменений, он работает отлично)
     if (gameState.playerRotation === 0) {
         if (assets.bg.complete && assets.bg.naturalWidth > 0) ctx.drawImage(assets.bg, 0, 0, canvas.width, canvas.height);
         else {
@@ -401,14 +418,14 @@ document.getElementById('create-room-btn').onclick = () => {
     const roomId = document.getElementById('room-input').value.trim();
     const password = document.getElementById('password-input').value;
     if (!roomId) return showError('Ошибка', 'Введите название комнаты!');
-    socket.emit('create-room', { roomId, password, nickname: myNickname });
+    socket.emit('create-room', { roomId, password, nickname: myNickname, playerId: myPlayerId });
 };
 
 document.getElementById('join-room-btn').onclick = () => {
     const roomId = document.getElementById('room-input').value.trim();
     const password = document.getElementById('password-input').value;
     if (!roomId) return showError('Ошибка', 'Введите название комнаты!');
-    socket.emit('join-room', { roomId, password, nickname: myNickname });
+    socket.emit('join-room', { roomId, password, nickname: myNickname, playerId: myPlayerId });
 };
 
 document.getElementById('play-single-btn').onclick = () => {
@@ -442,13 +459,26 @@ document.getElementById('admin-cancel-login-btn').onclick = () => document.getEl
 document.getElementById('close-admin-btn').onclick = () => document.getElementById('admin-panel').classList.add('hidden');
 document.getElementById('refresh-rooms-btn').onclick = () => socket.emit('request-rooms-list');
 
+// Обработчик кастомного ID в админке
+document.getElementById('admin-set-id-btn').onclick = () => {
+    const newId = document.getElementById('admin-custom-id').value.trim();
+    if (newId) {
+        myPlayerId = newId;
+        localStorage.setItem('playerId', myPlayerId);
+        document.getElementById('player-id-display').textContent = `🆔 ${myPlayerId}`;
+        document.getElementById('admin-current-id').textContent = myPlayerId;
+        document.getElementById('admin-custom-id').value = '';
+        alert(`✅ ID изменён на: ${myPlayerId}`);
+    }
+};
+
 document.getElementById('admin-ai-slider').oninput = function() {
     document.getElementById('admin-ai-val').textContent = this.value;
-    if (currentAdminRoom) socket.emit('admin-command', { roomId: currentAdminRoom, action: 'set-difficulty', value: parseInt(this.value), nickname: myNickname });
+    if (currentAdminRoom) socket.emit('admin-command', { roomId: currentAdminRoom, action: 'set-difficulty', value: parseInt(this.value), nickname: myNickname, playerId: myPlayerId });
 };
 document.getElementById('admin-hunger-slider').oninput = function() {
     document.getElementById('admin-hunger-val').textContent = this.value;
-    if (currentAdminRoom) socket.emit('update-game', { roomId: currentAdminRoom, state: { catHunger: parseInt(this.value) }, nickname: myNickname });
+    if (currentAdminRoom) socket.emit('update-game', { roomId: currentAdminRoom, state: { catHunger: parseInt(this.value) }, nickname: myNickname, playerId: myPlayerId });
 };
 
 // ИГРОВЫЕ КНОПКИ
@@ -527,7 +557,7 @@ document.getElementById('send-chat-btn').onclick = () => {
     const input = document.getElementById('chat-message-input');
     const msg = input.value.trim();
     if (msg && currentRoom) {
-        socket.emit('send-chat-message', { roomId: currentRoom, message: msg, type: 'player', nickname: myNickname });
+        socket.emit('send-chat-message', { roomId: currentRoom, message: msg, type: 'player', nickname: myNickname, playerId: myPlayerId });
         input.value = '';
     }
 };

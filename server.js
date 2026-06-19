@@ -10,7 +10,7 @@ const io = socketIo(server, {
 
 const PORT = process.env.PORT || 3000;
 const rooms = {};
-const ADMIN_PASSWORD = "abubaga67"; // МЕНЯЙ ПАРОЛЬ ЗДЕСЬ!
+const ADMIN_PASSWORD = "admin123"; // МЕНЯЙ ПАРОЛЬ ЗДЕСЬ!
 
 io.on('connection', (socket) => {
     console.log('Игрок подключился:', socket.id);
@@ -47,13 +47,14 @@ io.on('connection', (socket) => {
     
     // Отправка сообщения в чат комнаты
     socket.on('send-chat-message', (data) => {
-        const { roomId, message, type, nickname } = data;
+        const { roomId, message, type, nickname, playerId } = data;
         if (rooms[roomId]) {
             if (!rooms[roomId].chatLog) rooms[roomId].chatLog = [];
             const logEntry = { 
                 text: message, 
                 type: type || 'player',
                 nickname: nickname || 'Unknown',
+                playerId: playerId || '',
                 time: new Date().toLocaleTimeString() 
             };
             rooms[roomId].chatLog.push(logEntry);
@@ -81,7 +82,7 @@ io.on('connection', (socket) => {
     
     // Создание комнаты
     socket.on('create-room', (data) => {
-        const { roomId, password, nickname } = data;
+        const { roomId, password, nickname, playerId } = data;
         if (rooms[roomId]) {
             socket.emit('create-failed', { reason: 'Комната уже существует!' });
             return;
@@ -89,6 +90,7 @@ io.on('connection', (socket) => {
         rooms[roomId] = {
             players: [socket.id],
             nicknames: { [socket.id]: nickname || 'Player' },
+            passwords: { [socket.id]: playerId || '' },
             password: password || null,
             gameState: {
                 power: 100, catHunger: 0, gameTime: 0,
@@ -115,7 +117,7 @@ io.on('connection', (socket) => {
     
     // Вход в комнату
     socket.on('join-room', (data) => {
-        const { roomId, password, nickname } = data;
+        const { roomId, password, nickname, playerId } = data;
         const room = rooms[roomId];
         if (!room) {
             socket.emit('join-failed', { reason: 'Комната не найдена!' });
@@ -128,6 +130,7 @@ io.on('connection', (socket) => {
         socket.join(roomId);
         room.players.push(socket.id);
         room.nicknames[socket.id] = nickname || 'Player';
+        room.passwords[socket.id] = playerId || '';
         socket.emit('join-success', { roomId, gameState: room.gameState });
         socket.to(roomId).emit('player-joined', {
             playerId: socket.id,
@@ -144,27 +147,29 @@ io.on('connection', (socket) => {
     
     // Обновление состояния игры
     socket.on('update-game', (data) => {
-        const { roomId, state, nickname } = data;
+        const { roomId, state, nickname, playerId } = data;
         if (rooms[roomId]) {
             rooms[roomId].gameState = { ...rooms[roomId].gameState, ...state };
             io.to(roomId).emit('game-updated', rooms[roomId].gameState);
             
-            // Логирование действий
+            // Логирование действий с ID
             let actionText = '';
+            const playerInfo = playerId ? `[ID:${playerId}]` : '';
+            
             if (state.doorLeftClosed !== undefined) {
-                actionText = `${nickname || 'Игрок'} ${state.doorLeftClosed ? 'закрыл' : 'открыл'} ЛЕВУЮ дверь`;
+                actionText = `${playerInfo} ${nickname || 'Игрок'} ${state.doorLeftClosed ? 'закрыл' : 'открыл'} ЛЕВУЮ дверь`;
             } else if (state.doorRightClosed !== undefined) {
-                actionText = `${nickname || 'Игрок'} ${state.doorRightClosed ? 'закрыл' : 'открыл'} ПРАВУЮ дверь`;
+                actionText = `${playerInfo} ${nickname || 'Игрок'} ${state.doorRightClosed ? 'закрыл' : 'открыл'} ПРАВУЮ дверь`;
             } else if (state.lightLeft !== undefined) {
-                actionText = `${nickname || 'Игрок'} ${state.lightLeft ? 'включил' : 'выключил'} свет слева`;
+                actionText = `${playerInfo} ${nickname || 'Игрок'} ${state.lightLeft ? 'включил' : 'выключил'} свет слева`;
             } else if (state.lightRight !== undefined) {
-                actionText = `${nickname || 'Игрок'} ${state.lightRight ? 'включил' : 'выключил'} свет справа`;
+                actionText = `${playerInfo} ${nickname || 'Игрок'} ${state.lightRight ? 'включил' : 'выключил'} свет справа`;
             } else if (state.aiSpeed !== undefined) {
-                actionText = `${nickname || 'Admin'} изменил сложность на ${state.aiSpeed}`;
+                actionText = `${playerInfo} ${nickname || 'Admin'} изменил сложность на ${state.aiSpeed}`;
             } else if (state.catHunger !== undefined) {
-                actionText = `${nickname || 'Игрок'} покормил кота`;
+                actionText = `${playerInfo} ${nickname || 'Игрок'} покормил кота`;
             } else if (state.foodInventory !== undefined) {
-                actionText = `${nickname || 'Игрок'} взял еду`;
+                actionText = `${playerInfo} ${nickname || 'Игрок'} взял еду`;
             }
             
             if (actionText) {
@@ -172,7 +177,8 @@ io.on('connection', (socket) => {
                     roomId,
                     message: actionText,
                     type: 'system',
-                    nickname: nickname || 'System'
+                    nickname: nickname || 'System',
+                    playerId: playerId
                 });
             }
         }
@@ -180,7 +186,7 @@ io.on('connection', (socket) => {
     
     // Админ-команды
     socket.on('admin-command', (data) => {
-        const { roomId, action, value, nickname } = data;
+        const { roomId, action, value, nickname, playerId } = data;
         if (rooms[roomId]) {
             if (action === 'set-difficulty') {
                 rooms[roomId].gameState.aiSpeed = value;
@@ -207,6 +213,7 @@ io.on('connection', (socket) => {
                 const nickname = rooms[roomId].nicknames[socket.id] || 'Player';
                 rooms[roomId].players.splice(roomIndex, 1);
                 delete rooms[roomId].nicknames[socket.id];
+                delete rooms[roomId].passwords[socket.id];
                 socket.to(roomId).emit('player-left', {
                     playerId: socket.id,
                     nickname: nickname
@@ -228,5 +235,5 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
     console.log(`🎮 Сервер запущен на порту ${PORT}`);
-    console.log(`🔐 Пароль админа: ${ADMIN_PASSWORD}`);
+    console.log(` Пароль админа: ${ADMIN_PASSWORD}`);
 });

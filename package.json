@@ -1,13 +1,27 @@
 {
-  "name": "5 nights with klassuxa",
+  "name": "5 nights with klassukha",
   "version": "1.0.0",
-  "description": "Server for 5 Nights with Klassukha",
-  "main": "server.js",
+  "description": "5 Nights with Klassukha",
+  "main": "main.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "electron .",
+    "build": "electron-builder"
   },
-  "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.2"
+  "author": "Yarosib",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.testapp.game",
+    "productName": "5 ночей с классухой",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "portable",
+      "icon": "assets/icon.ico"
+    }
   }
 }

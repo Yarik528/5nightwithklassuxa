@@ -1,34 +1,30 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow } = require('electron');
 const path = require('path');
 
 function createWindow() {
-    const win = new BrowserWindow({
+    const mainWindow = new BrowserWindow({
         width: 1280,
         height: 720,
         fullscreen: true,
-        title: '5 Ночей с Классухой',
-        icon: path.join(__dirname, 'icon.ico'),
-        frame: false,
-        titleBarStyle: 'hidden',
         webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            devTools: false
+            nodeIntegration: true,
+            contextIsolation: false
         },
-        show: false
+        icon: path.join(__dirname, 'assets/icon.ico')
     });
 
-    win.loadFile('index.html');
-    win.setMenuBarVisibility(false);
-    Menu.setApplicationMenu(null);
+    mainWindow.loadFile('index.html');
     
-    win.once('ready-to-show', () => {
-        win.show();
-    });
+    // Убрать меню (опционально)
+    mainWindow.setMenuBarVisibility(false);
 }
 
 app.whenReady().then(createWindow);
-app.on('window-all-closed', () => { app.quit(); });
+
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+});
+
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });

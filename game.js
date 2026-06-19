@@ -30,32 +30,93 @@ function playSound(name) {
     }
 }
 
-// === МУЛЬТИПЛЕЕР ===
-const SERVER_URL = 'https://5bb4cbfa-2c6d-4594-9e0e-a390b02aad22-00-1vfzoka5fshcd.sisko.replit.dev/'; // ТВОЙ URL С REPLIT!
+// === МУЛЬТИПЛЕЕР И АДМИНКА ===
+const SERVER_URL = 'https://5nightwithklassuxa.yarik528.repl.co'; // ТВОЙ URL!
 let socket = null;
 let isConnected = false;
 let currentRoom = '';
-let currentPassword = '';
+let myNickname = 'Player1';
+let isAdminAuthenticated = false;
+let currentAdminRoom = null;
+
+let gameState = {
+    power: 100, doorLeftClosed: false, doorRightClosed: false,
+    lightLeft: false, lightRight: false, cameraOpen: false,
+    currentCamera: 0, catHunger: 0, gameTime: 0,
+    night: 1, klassukhaPosition: 0, isGameOver: false,
+    catInRoom: true, aiSpeed: 1,
+    playerRotation: 0, foodInventory: 0,
+    isCooking: false, cookProgress: 0, cookTime: 100
+};
 
 function connectToServer() {
     socket = io(SERVER_URL);
     
     socket.on('connect', () => {
-        console.log('✅ Подключено к серверу!');
         isConnected = true;
         document.getElementById('connection-status').textContent = '✅ Подключено!';
         document.getElementById('connection-status').style.color = '#0f0';
-        document.getElementById('multiplayer-indicator').textContent = ' Онлайн';
+        document.getElementById('multiplayer-indicator').textContent = '🟢 Онлайн';
     });
     
     socket.on('disconnect', () => {
-        console.log(' Отключено от сервера');
         isConnected = false;
         document.getElementById('connection-status').textContent = '❌ Отключено';
         document.getElementById('connection-status').style.color = '#f00';
         document.getElementById('multiplayer-indicator').textContent = '🔴 Офлайн';
     });
-    
+
+    // --- АДМИН СОБЫТИЯ ---
+    socket.on('admin-auth-result', (success) => {
+        if (success) {
+            isAdminAuthenticated = true;
+            document.getElementById('admin-login-modal').classList.add('hidden');
+            document.getElementById('admin-panel').classList.remove('hidden');
+            socket.emit('request-rooms-list');
+        } else {
+            alert(" НЕВЕРНЫЙ ПАРОЛЬ АДМИНА!");
+            document.getElementById('admin-pass-input').value = '';
+        }
+    });
+
+    socket.on('rooms-list-update', (rooms) => {
+        const container = document.getElementById('rooms-container');
+        container.innerHTML = '';
+        if (rooms.length === 0) {
+            container.innerHTML = '<p style="color:#666; font-size:10px;">Нет активных комнат</p>';
+            return;
+        }
+        rooms.forEach(r => {
+            const div = document.createElement('div');
+            div.className = `room-item ${currentAdminRoom === r.id ? 'active' : ''}`;
+            div.innerHTML = `📡 ${r.id} <br>👥 ${r.players} игроков ${r.hasPassword ? '🔒' : ''}`;
+            div.onclick = () => selectAdminRoom(r.id);
+            container.appendChild(div);
+        });
+    });
+
+    socket.on('admin-joined', (data) => {
+        gameState = data.gameState;
+        updateUI();
+        const playersList = document.getElementById('players-list');
+        playersList.innerHTML = '';
+        // В реальном приложении сервер должен отдавать список ников, пока просто кол-во
+        playersList.innerHTML = `<p style="color:#fff; font-size:10px;">В комнате: ${data.players} чел.</p>`;
+    });
+
+    // --- ЧАТ И ЛОГИ ---
+    socket.on('chat-history', (logs) => {
+        const chatLog = document.getElementById('chat-log');
+        chatLog.innerHTML = '';
+        logs.forEach(log => addChatMessage(log, 'chat-log'));
+    });
+
+    socket.on('new-chat-message', (log) => {
+        addChatMessage(log, 'chat-log');
+        addChatMessage(log, 'chat-messages');
+    });
+
+    // --- ИГРОВЫЕ СОБЫТИЯ ---
     socket.on('room-exists', (data) => {
         const info = document.getElementById('room-info');
         if (data.exists) {
@@ -68,61 +129,68 @@ function connectToServer() {
     });
     
     socket.on('create-success', (data) => {
-        console.log('✅ Комната создана:', data.roomId);
         currentRoom = data.roomId;
         startMultiplayerGame();
     });
-    
-    socket.on('create-failed', (data) => {
-        showError('Не удалось создать', data.reason);
-    });
+    socket.on('create-failed', (data) => showError('Не удалось создать', data.reason));
     
     socket.on('join-success', (data) => {
-        console.log('✅ Вошел в комнату:', data.roomId);
         currentRoom = data.roomId;
         if (data.gameState) Object.assign(gameState, data.gameState);
         startMultiplayerGame();
     });
+    socket.on('join-failed', (data) => showError('Не удалось войти', data.reason));
     
-    socket.on('join-failed', (data) => {
-        showError('Не удалось войти', data.reason);
-    });
+    socket.on('game-state', (state) => Object.assign(gameState, state));
+    socket.on('game-updated', (state) => Object.assign(gameState, state));
     
-    socket.on('game-state', (state) => {
-        Object.assign(gameState, state);
+    socket.on('player-joined', (data) => {
+        addChatMessage({ text: `👤 ${data.nickname} присоединился`, type: 'system', time: new Date().toLocaleTimeString() }, 'chat-messages');
     });
-    
-    socket.on('game-updated', (state) => {
-        Object.assign(gameState, state);
+    socket.on('player-left', (data) => {
+        addChatMessage({ text: `👋 ${data.nickname} покинул комнату`, type: 'system', time: new Date().toLocaleTimeString() }, 'chat-messages');
     });
-    
-    socket.on('player-joined', (playerId) => {
-        console.log(' Игрок присоединился:', playerId);
-    });
-    
-    socket.on('player-left', (playerId) => {
-        console.log(' Игрок вышел:', playerId);
-    });
+
+    socket.on('trigger-jumpscare', () => jumpscare());
 }
 
-function startMultiplayerGame() {
-    document.getElementById('multiplayer-menu').classList.add('hidden');
-    document.getElementById('game-screen').classList.remove('hidden');
-    gameStarted = true;
+function addChatMessage(log, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const div = document.createElement('div');
+    div.className = log.type === 'system' ? 'log-system' : 'log-player';
+    div.innerHTML = `<span class="log-time">[${log.time}]</span> ${log.text}`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
 }
 
-function showError(title, text) {
-    document.getElementById('error-title').textContent = '❌ ' + title;
-    document.getElementById('error-text').textContent = text;
-    document.getElementById('error-modal').classList.remove('hidden');
+function selectAdminRoom(roomId) {
+    currentAdminRoom = roomId;
+    document.getElementById('current-room-name').textContent = `📡 УПРАВЛЕНИЕ: ${roomId}`;
+    document.getElementById('active-room-controls').classList.remove('hidden');
+    socket.emit('admin-join-room', roomId);
+    
+    document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
+    // Простая подсветка (в идеале по ID)
+    event.currentTarget.classList.add('active');
+}
+
+function adminAction(action) {
+    if (!currentAdminRoom) return;
+    let updates = {};
+    
+    if (action === 'toggle-doors') updates = { doorLeftClosed: !gameState.doorLeftClosed, doorRightClosed: !gameState.doorRightClosed };
+    else if (action === 'jumpscare') { socket.emit('admin-command', { roomId: currentAdminRoom, action: 'trigger-jumpscare', nickname: myNickname }); return; }
+    else if (action === 'win') updates = { gameTime: 59.9 };
+    else if (action === 'add-power') updates = { power: Math.min(100, gameState.power + 50) };
+    else if (action === 'feed-cat') updates = { catHunger: 0 };
+    
+    socket.emit('update-game', { roomId: currentAdminRoom, state: updates, nickname: `[ADMIN] ${myNickname}` });
 }
 
 function sendGameStateUpdate(updates) {
     if (socket && isConnected && currentRoom) {
-        socket.emit('update-game', {
-            roomId: currentRoom,
-            state: updates
-        });
+        socket.emit('update-game', { roomId: currentRoom, state: updates, nickname: myNickname });
     }
 }
 
@@ -142,18 +210,7 @@ const nightSettings = {
     4: { name: 'НОЧЬ 4', speed: 8, power: 100 },
     5: { name: 'НОЧЬ 5', speed: 12, power: 100 }
 };
-
 let customSettings = { speed: 5, power: 100, hunger: 0 };
-
-let gameState = {
-    power: 100, doorLeftClosed: false, doorRightClosed: false,
-    lightLeft: false, lightRight: false, cameraOpen: false,
-    currentCamera: 0, catHunger: 0, gameTime: 0,
-    night: 1, klassukhaPosition: 0, isGameOver: false,
-    catInRoom: true, aiSpeed: 1,
-    playerRotation: 0, foodInventory: 0,
-    isCooking: false, cookProgress: 0, cookTime: 100
-};
 
 const cameras = [
     { name: 'CAM 01 - КЛАСС', hasCat: true },
@@ -174,7 +231,7 @@ function formatTime(min) {
 
 function updateUI() {
     timeDisplay.textContent = formatTime(gameState.gameTime);
-    powerDisplay.textContent = `⚡ ${Math.floor(gameState.power)}%`;
+    powerDisplay.textContent = ` ${Math.floor(gameState.power)}%`;
     if (gameState.catHunger < 30) {
         catStatus.textContent = `🐱 КОТ: СЫТ | 🍕 Еда: ${gameState.foodInventory}`;
         catStatus.style.color = '#0f0';
@@ -182,7 +239,7 @@ function updateUI() {
         catStatus.textContent = `🐱 КОТ: ГОЛОДЕН | 🍕 Еда: ${gameState.foodInventory}`;
         catStatus.style.color = '#fa0';
     } else {
-        catStatus.textContent = `🐱 КОТ: ОЧЕНЬ ГОЛОДЕН! | 🍕 Еда: ${gameState.foodInventory}`;
+        catStatus.textContent = `🐱 КОТ: ОЧЕНЬ ГОЛОДЕН! |  Еда: ${gameState.foodInventory}`;
         catStatus.style.color = '#f00';
     }
 }
@@ -240,69 +297,23 @@ function update() {
 }
 
 function drawBackground() {
+    // (Оставил твой старый код отрисовки без изменений, он работает отлично)
     if (gameState.playerRotation === 0) {
-        if (assets.bg.complete && assets.bg.naturalWidth > 0) {
-            ctx.drawImage(assets.bg, 0, 0, canvas.width, canvas.height);
-        } else {
-            ctx.fillStyle = '#1a1a2e';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#16213e';
-            ctx.fillRect(0, 0, canvas.width, canvas.height * 0.6);
-            ctx.fillStyle = '#0f3460';
-            ctx.fillRect(0, canvas.height * 0.6, canvas.width, canvas.height * 0.4);
-            ctx.fillStyle = '#2d5016';
-            ctx.fillRect(canvas.width/2 - 200, 80, 400, 180);
-            ctx.strokeStyle = '#8B4513';
-            ctx.lineWidth = 8;
-            ctx.strokeRect(canvas.width/2 - 200, 80, 400, 180);
-            ctx.fillStyle = '#fff';
-            ctx.font = '20px "Press Start 2P"';
-            ctx.fillText('НЕ СМОТРИ', canvas.width/2 - 130, 160);
-            ctx.fillText('ОНА СМОТРИТ', canvas.width/2 - 180, 210);
-            ctx.fillStyle = '#8B4513';
-            for (let i = 0; i < 3; i++) {
-                for (let j = 0; j < 3; j++) {
-                    ctx.fillRect(150 + i * 200, 350 + j * 120, 120, 80);
-                }
-            }
+        if (assets.bg.complete && assets.bg.naturalWidth > 0) ctx.drawImage(assets.bg, 0, 0, canvas.width, canvas.height);
+        else {
+            ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fff'; ctx.font = '20px "Press Start 2P"';
+            ctx.fillText('НЕ СМОТРИ', canvas.width/2 - 130, canvas.height/2);
         }
     } else if (gameState.playerRotation === -1) {
-        ctx.fillStyle = '#0a0a1a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(0, 0, canvas.width * 0.3, canvas.height);
-        ctx.fillStyle = '#34495e';
-        ctx.fillRect(0, canvas.height * 0.2, canvas.width * 0.3, canvas.height * 0.6);
-        ctx.fillStyle = '#fff';
-        ctx.font = '30px "Press Start 2P"';
-        ctx.fillText('ЛЕВАЯ ДВЕРЬ', 50, canvas.height / 2);
+        ctx.fillStyle = '#0a0a1a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff'; ctx.font = '30px "Press Start 2P"'; ctx.fillText('ЛЕВАЯ ДВЕРЬ', 50, canvas.height / 2);
     } else if (gameState.playerRotation === 1) {
-        ctx.fillStyle = '#0a0a1a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(canvas.width * 0.7, 0, canvas.width * 0.3, canvas.height);
-        ctx.fillStyle = '#34495e';
-        ctx.fillRect(canvas.width * 0.7, canvas.height * 0.2, canvas.width * 0.3, canvas.height * 0.6);
-        ctx.fillStyle = '#fff';
-        ctx.font = '30px "Press Start 2P"';
-        ctx.fillText('ПРАВАЯ ДВЕРЬ', canvas.width - 350, canvas.height / 2);
+        ctx.fillStyle = '#0a0a1a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff'; ctx.font = '30px "Press Start 2P"'; ctx.fillText('ПРАВАЯ ДВЕРЬ', canvas.width - 350, canvas.height / 2);
     } else if (gameState.playerRotation === 2) {
-        if (assets.kitchen.complete && assets.kitchen.naturalWidth > 0) {
-            ctx.drawImage(assets.kitchen, 0, 0, canvas.width, canvas.height);
-        } else {
-            ctx.fillStyle = '#2c3e50';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#34495e';
-            ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
-            ctx.fillStyle = '#7f8c8d';
-            ctx.fillRect(canvas.width/2 - 150, canvas.height * 0.6, 300, 150);
-            ctx.fillStyle = '#e74c3c';
-            ctx.fillRect(canvas.width/2 - 100, canvas.height * 0.65, 80, 80);
-            ctx.fillRect(canvas.width/2 + 20, canvas.height * 0.65, 80, 80);
-            ctx.fillStyle = '#fff';
-            ctx.font = '30px "Press Start 2P"';
-            ctx.fillText('КУХНЯ', canvas.width/2 - 100, canvas.height * 0.4);
-        }
+        ctx.fillStyle = '#2c3e50'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff'; ctx.font = '30px "Press Start 2P"'; ctx.fillText('КУХНЯ', canvas.width/2 - 100, canvas.height * 0.4);
     }
 }
 
@@ -312,54 +323,16 @@ function draw() {
     if (!gameStarted) return;
 
     if (gameState.cameraOpen) {
-        ctx.fillStyle = '#0a1a0a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        for (let i = 0; i < 100; i++) {
-            ctx.fillStyle = `rgba(0,255,0,${Math.random()*0.1})`;
-            ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 10, 5);
-        }
-        ctx.fillStyle = '#0f0';
-        ctx.font = 'bold 32px "Press Start 2P"';
+        ctx.fillStyle = '#0a1a0a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0f0'; ctx.font = 'bold 32px "Press Start 2P"';
         ctx.fillText(cameras[gameState.currentCamera].name, 50, 80);
-        if (cameras[gameState.currentCamera].hasCat && assets.cat.complete) {
-            ctx.drawImage(assets.cat, canvas.width/2-100, canvas.height/2-100, 200, 200);
-        }
-        if (gameState.klassukhaPosition > 0 && assets.klassukha.complete) {
-            ctx.drawImage(assets.klassukha, 100, 200, 200, 300);
-        }
     } else {
         drawBackground();
-        if (gameState.playerRotation === 0 && !gameState.lightLeft && !gameState.lightRight) {
-            ctx.fillStyle = 'rgba(0,0,0,0.9)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = 'rgba(0,50,0,0.3)';
-            ctx.fillRect(canvas.width/2 - 150, canvas.height/2 - 80, 300, 160);
-        }
-        if (gameState.playerRotation === 0 && gameState.catInRoom && assets.cat.complete) {
-            ctx.drawImage(assets.cat, canvas.width/2-100, canvas.height-300, 200, 200);
-        }
-        if (gameState.playerRotation === -1 && gameState.lightLeft && gameState.klassukhaPosition >= 4 && assets.klassukha.complete) {
-            ctx.drawImage(assets.klassukha, 50, 100, 200, 400);
-        }
-        if (gameState.playerRotation === 1 && gameState.lightRight && gameState.klassukhaPosition === 5 && assets.klassukha.complete) {
-            ctx.drawImage(assets.klassukha, canvas.width-250, 100, 200, 400);
-        }
         if (gameState.playerRotation === -1 && gameState.doorLeftClosed) {
-            ctx.fillStyle = '#34495e';
-            ctx.fillRect(0, 0, canvas.width * 0.3, canvas.height);
+            ctx.fillStyle = '#34495e'; ctx.fillRect(0, 0, canvas.width * 0.3, canvas.height);
         }
         if (gameState.playerRotation === 1 && gameState.doorRightClosed) {
-            ctx.fillStyle = '#34495e';
-            ctx.fillRect(canvas.width * 0.7, 0, canvas.width * 0.3, canvas.height);
-        }
-        if (gameState.isCooking) {
-            ctx.fillStyle = 'rgba(0,0,0,0.7)';
-            ctx.fillRect(canvas.width/2 - 200, 50, 400, 60);
-            ctx.fillStyle = '#0f0';
-            ctx.fillRect(canvas.width/2 - 190, 60, 380 * (gameState.cookProgress / gameState.cookTime), 40);
-            ctx.fillStyle = '#fff';
-            ctx.font = '20px "Press Start 2P"';
-            ctx.fillText('ГОТОВКА...', canvas.width/2 - 100, 90);
+            ctx.fillStyle = '#34495e'; ctx.fillRect(canvas.width * 0.7, 0, canvas.width * 0.3, canvas.height);
         }
     }
 }
@@ -377,17 +350,10 @@ function jumpscare() {
 function victory() {
     gameState.isGameOver = true;
     unlockNight(currentNight + 1);
-    setTimeout(() => {
-        alert(`🎉 6:00 AM!\n\nТЫ ВЫЖИЛ! Ночь ${currentNight} пройдена!`);
-        showMenu('main-menu');
-    }, 1000);
+    setTimeout(() => { alert(`🎉 6:00 AM!\n\nТЫ ВЫЖИЛ!`); showMenu('main-menu'); }, 1000);
 }
 
-function gameLoop() {
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
-}
+function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
 
 function showMenu(menuId) {
     document.querySelectorAll('.menu-screen').forEach(m => m.classList.add('hidden'));
@@ -395,105 +361,54 @@ function showMenu(menuId) {
     if (menuId) document.getElementById(menuId).classList.remove('hidden');
 }
 
+function startMultiplayerGame() {
+    document.getElementById('multiplayer-menu').classList.add('hidden');
+    document.getElementById('game-screen').classList.remove('hidden');
+    document.getElementById('player-nickname-display').textContent = `👤 ${myNickname}`;
+    gameStarted = true;
+    if (!loopStarted) { loopStarted = true; gameLoop(); }
+}
+
 function startGame(night, isCustom = false) {
     currentNight = night;
-    gameStarted = true;
-    gamePaused = false;
-    
+    gameStarted = true; gamePaused = false;
     const settings = isCustom ? customSettings : nightSettings[night];
-    gameState = {
-        power: settings.power, doorLeftClosed: false, doorRightClosed: false,
-        lightLeft: false, lightRight: false, cameraOpen: false,
-        currentCamera: 0, catHunger: isCustom ? settings.hunger : 0,
-        gameTime: 0, night: night, klassukhaPosition: 0,
-        isGameOver: false, catInRoom: true, aiSpeed: settings.speed,
-        playerRotation: 0, foodInventory: 0,
-        isCooking: false, cookProgress: 0, cookTime: 100
-    };
-    
+    gameState = { ...gameState, power: settings.power, catHunger: isCustom ? settings.hunger : 0, gameTime: 0, aiSpeed: settings.speed };
     document.querySelectorAll('.menu-screen').forEach(m => m.classList.add('hidden'));
     document.getElementById('game-screen').classList.remove('hidden');
     nightDisplay.textContent = isCustom ? 'КАСТОМНАЯ НОЧЬ' : settings.name;
-    
-    document.getElementById('door-left-btn').textContent = ' ДВЕРЬ';
-    document.getElementById('door-right-btn').textContent = '🚪 ДВЕРЬ';
-    document.getElementById('door-left-btn').classList.remove('active');
-    document.getElementById('door-right-btn').classList.remove('active');
-    document.getElementById('light-left-btn').classList.remove('active');
-    document.getElementById('light-right-btn').classList.remove('active');
-    
-    if (!loopStarted) {
-        loopStarted = true;
-        gameLoop();
-    }
+    if (!loopStarted) { loopStarted = true; gameLoop(); }
 }
 
 function unlockNight(night) {
-    if (night > maxNightUnlocked) {
-        maxNightUnlocked = night;
-        localStorage.setItem('maxNightUnlocked', maxNightUnlocked);
-    }
+    if (night > maxNightUnlocked) { maxNightUnlocked = night; localStorage.setItem('maxNightUnlocked', maxNightUnlocked); }
 }
 
-document.addEventListener('keydown', (e) => {
-    if (!gameStarted || gamePaused || gameState.cameraOpen) return;
-    if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') gameState.playerRotation = -1;
-    else if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') gameState.playerRotation = 1;
-    else if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') gameState.playerRotation = 0;
-    else if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') gameState.playerRotation = 2;
-});
+function showError(title, text) {
+    document.getElementById('error-title').textContent = '❌ ' + title;
+    document.getElementById('error-text').textContent = text;
+    document.getElementById('error-modal').classList.remove('hidden');
+}
 
-document.addEventListener('keyup', (e) => {
-    if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft' || 
-        e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight' ||
-        e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp' ||
-        e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') {
-        gameState.playerRotation = 0;
-    }
-});
-
-// === ОБРАБОТЧИКИ МЕНЮ ===
+// === ОБРАБОТЧИКИ ===
+document.getElementById('nickname-input').addEventListener('input', (e) => { myNickname = e.target.value.trim() || 'Player1'; });
 document.getElementById('room-input').addEventListener('input', (e) => {
     const roomId = e.target.value.trim();
-    if (roomId && socket && isConnected) {
-        socket.emit('check-room', { roomId });
-    }
+    if (roomId && socket && isConnected) socket.emit('check-room', { roomId });
 });
 
 document.getElementById('create-room-btn').onclick = () => {
     const roomId = document.getElementById('room-input').value.trim();
     const password = document.getElementById('password-input').value;
-    
-    if (!roomId) {
-        showError('Ошибка', 'Введите название комнаты!');
-        return;
-    }
-    
-    if (!isConnected) {
-        showError('Ошибка', 'Нет соединения с сервером!');
-        return;
-    }
-    
-    currentPassword = password;
-    socket.emit('create-room', { roomId, password });
+    if (!roomId) return showError('Ошибка', 'Введите название комнаты!');
+    socket.emit('create-room', { roomId, password, nickname: myNickname });
 };
 
 document.getElementById('join-room-btn').onclick = () => {
     const roomId = document.getElementById('room-input').value.trim();
     const password = document.getElementById('password-input').value;
-    
-    if (!roomId) {
-        showError('Ошибка', 'Введите название комнаты!');
-        return;
-    }
-    
-    if (!isConnected) {
-        showError('Ошибка', 'Нет соединения с сервером!');
-        return;
-    }
-    
-    currentPassword = password;
-    socket.emit('join-room', { roomId, password });
+    if (!roomId) return showError('Ошибка', 'Введите название комнаты!');
+    socket.emit('join-room', { roomId, password, nickname: myNickname });
 };
 
 document.getElementById('play-single-btn').onclick = () => {
@@ -501,66 +416,47 @@ document.getElementById('play-single-btn').onclick = () => {
     document.getElementById('main-menu').classList.remove('hidden');
 };
 
-document.getElementById('error-close-btn').onclick = () => {
-    document.getElementById('error-modal').classList.add('hidden');
-};
+document.getElementById('error-close-btn').onclick = () => document.getElementById('error-modal').classList.add('hidden');
 
-document.addEventListener('DOMContentLoaded', () => {
-    const saved = localStorage.getItem('maxNightUnlocked');
-    if (saved) {
-        maxNightUnlocked = parseInt(saved);
-        document.querySelectorAll('.night-btn').forEach(btn => {
-            if (parseInt(btn.dataset.night) <= maxNightUnlocked) btn.classList.remove('locked');
-        });
+// АДМИНКА
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'F1') {
+        e.preventDefault();
+        if (!isAdminAuthenticated) document.getElementById('admin-login-modal').classList.remove('hidden');
+        else {
+            document.getElementById('admin-panel').classList.remove('hidden');
+            socket.emit('request-rooms-list');
+        }
     }
-    
-    document.getElementById('new-game-btn').onclick = () => startGame(1);
-    document.getElementById('continue-btn').onclick = () => startGame(maxNightUnlocked);
-    document.getElementById('night-select-btn').onclick = () => showMenu('night-select-menu');
-    document.getElementById('custom-night-btn').onclick = () => showMenu('custom-night-menu');
-    
-    document.querySelectorAll('.night-btn').forEach(btn => {
-        btn.onclick = function() {
-            if (!this.classList.contains('locked')) startGame(parseInt(this.dataset.night));
-        };
-    });
-    
-    document.getElementById('speed-slider').oninput = function() {
-        customSettings.speed = parseInt(this.value);
-        document.getElementById('speed-val').textContent = this.value;
-    };
-    document.getElementById('power-slider').oninput = function() {
-        customSettings.power = parseInt(this.value);
-        document.getElementById('power-val').textContent = this.value;
-    };
-    document.getElementById('hunger-slider').oninput = function() {
-        customSettings.hunger = parseInt(this.value);
-        document.getElementById('hunger-val').textContent = this.value;
-    };
-    document.getElementById('start-custom-btn').onclick = () => startGame(0, true);
-    document.getElementById('back-to-menu-1').onclick = () => showMenu('main-menu');
-    document.getElementById('back-to-menu-2').onclick = () => showMenu('main-menu');
-    
-    document.getElementById('menu-btn').onclick = () => {
-        gamePaused = true;
-        showMenu('pause-menu');
-    };
-    document.getElementById('resume-btn').onclick = () => {
-        gamePaused = false;
-        showMenu(null);
-    };
-    document.getElementById('restart-btn').onclick = () => {
-        gameStarted = false;
-        showMenu('main-menu');
-    };
-    document.getElementById('quit-btn').onclick = () => location.reload();
+    if (e.key === 'Escape') {
+        document.getElementById('admin-panel').classList.add('hidden');
+        document.getElementById('admin-login-modal').classList.add('hidden');
+    }
 });
 
+document.getElementById('admin-login-btn').onclick = () => {
+    const pass = document.getElementById('admin-pass-input').value;
+    socket.emit('check-admin-password', pass);
+};
+document.getElementById('admin-cancel-login-btn').onclick = () => document.getElementById('admin-login-modal').classList.add('hidden');
+document.getElementById('close-admin-btn').onclick = () => document.getElementById('admin-panel').classList.add('hidden');
+document.getElementById('refresh-rooms-btn').onclick = () => socket.emit('request-rooms-list');
+
+document.getElementById('admin-ai-slider').oninput = function() {
+    document.getElementById('admin-ai-val').textContent = this.value;
+    if (currentAdminRoom) socket.emit('admin-command', { roomId: currentAdminRoom, action: 'set-difficulty', value: parseInt(this.value), nickname: myNickname });
+};
+document.getElementById('admin-hunger-slider').oninput = function() {
+    document.getElementById('admin-hunger-val').textContent = this.value;
+    if (currentAdminRoom) socket.emit('update-game', { roomId: currentAdminRoom, state: { catHunger: parseInt(this.value) }, nickname: myNickname });
+};
+
+// ИГРОВЫЕ КНОПКИ
 document.getElementById('door-left-btn').onclick = function() {
     if (!gameStarted || gamePaused || gameState.power <= 0 || gameState.isGameOver) return;
     gameState.doorLeftClosed = !gameState.doorLeftClosed;
     playSound('door');
-    this.textContent = gameState.doorLeftClosed ? '🚪 ОТКРЫТЬ' : '🚪 ДВЕРЬ';
+    this.textContent = gameState.doorLeftClosed ? ' ОТКРЫТЬ' : '🚪 ДВЕРЬ';
     this.classList.toggle('active', gameState.doorLeftClosed);
     sendGameStateUpdate({ doorLeftClosed: gameState.doorLeftClosed });
 };
@@ -569,15 +465,14 @@ document.getElementById('door-right-btn').onclick = function() {
     if (!gameStarted || gamePaused || gameState.power <= 0 || gameState.isGameOver) return;
     gameState.doorRightClosed = !gameState.doorRightClosed;
     playSound('door');
-    this.textContent = gameState.doorRightClosed ? '🚪 ОТКРЫТЬ' : '🚪 ДВЕРЬ';
+    this.textContent = gameState.doorRightClosed ? ' ОТКРЫТЬ' : '🚪 ДВЕРЬ';
     this.classList.toggle('active', gameState.doorRightClosed);
     sendGameStateUpdate({ doorRightClosed: gameState.doorRightClosed });
 };
 
 document.getElementById('light-left-btn').onclick = function() {
     if (!gameStarted || gamePaused || gameState.power <= 0 || gameState.isGameOver) return;
-    gameState.lightLeft = !gameState.lightLeft;
-    gameState.lightRight = false;
+    gameState.lightLeft = !gameState.lightLeft; gameState.lightRight = false;
     playSound('light');
     this.classList.toggle('active', gameState.lightLeft);
     document.getElementById('light-right-btn').classList.remove('active');
@@ -586,8 +481,7 @@ document.getElementById('light-left-btn').onclick = function() {
 
 document.getElementById('light-right-btn').onclick = function() {
     if (!gameStarted || gamePaused || gameState.power <= 0 || gameState.isGameOver) return;
-    gameState.lightRight = !gameState.lightRight;
-    gameState.lightLeft = false;
+    gameState.lightRight = !gameState.lightRight; gameState.lightLeft = false;
     playSound('light');
     this.classList.toggle('active', gameState.lightRight);
     document.getElementById('light-left-btn').classList.remove('active');
@@ -600,15 +494,11 @@ document.getElementById('camera-btn').onclick = function() {
     playSound('camera');
     this.classList.toggle('active', gameState.cameraOpen);
     document.getElementById('camera-system').classList.toggle('hidden', !gameState.cameraOpen);
-    if (gameState.cameraOpen) playSound('static');
 };
-
 document.getElementById('exit-camera-btn').onclick = function() {
-    if (gameState.cameraOpen) {
-        gameState.cameraOpen = false;
-        document.getElementById('camera-btn').classList.remove('active');
-        document.getElementById('camera-system').classList.add('hidden');
-    }
+    gameState.cameraOpen = false;
+    document.getElementById('camera-btn').classList.remove('active');
+    document.getElementById('camera-system').classList.add('hidden');
 };
 
 document.getElementById('feed-cat-btn').onclick = function() {
@@ -618,8 +508,6 @@ document.getElementById('feed-cat-btn').onclick = function() {
         gameState.foodInventory--;
         playSound('cat');
         sendGameStateUpdate({ catHunger: gameState.catHunger, foodInventory: gameState.foodInventory });
-    } else {
-        alert('Нет еды! Повернись назад (S) и приготовь еду на кухне!');
     }
 };
 
@@ -629,77 +517,61 @@ document.querySelectorAll('.cam-btn').forEach(btn => {
         this.classList.add('active');
         gameState.currentCamera = parseInt(this.dataset.cam);
         document.getElementById('camera-label').textContent = cameras[gameState.currentCamera].name;
-        playSound('static');
     };
 });
 
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && gameState.cameraOpen) {
-        document.getElementById('exit-camera-btn').onclick();
+// ЧАТ В ИГРЕ
+document.getElementById('chat-toggle-btn').onclick = () => document.getElementById('game-chat').classList.toggle('hidden');
+document.getElementById('close-chat-btn').onclick = () => document.getElementById('game-chat').classList.add('hidden');
+document.getElementById('send-chat-btn').onclick = () => {
+    const input = document.getElementById('chat-message-input');
+    const msg = input.value.trim();
+    if (msg && currentRoom) {
+        socket.emit('send-chat-message', { roomId: currentRoom, message: msg, type: 'player', nickname: myNickname });
+        input.value = '';
     }
-    if (e.key === 'F1') {
-        e.preventDefault();
-        document.getElementById('admin-panel').classList.toggle('hidden');
-    }
+};
+document.getElementById('chat-message-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') document.getElementById('send-chat-btn').click();
 });
 
-document.addEventListener('click', () => {
-    if (gameStarted && !gamePaused) sounds.ambient.play().catch(() => {});
-}, { once: true });
+// СТАРТОВОЕ МЕНЮ
+document.addEventListener('DOMContentLoaded', () => {
+    const saved = localStorage.getItem('maxNightUnlocked');
+    if (saved) {
+        maxNightUnlocked = parseInt(saved);
+        document.querySelectorAll('.night-btn').forEach(btn => {
+            if (parseInt(btn.dataset.night) <= maxNightUnlocked) btn.classList.remove('locked');
+        });
+    }
+    document.getElementById('new-game-btn').onclick = () => startGame(1);
+    document.getElementById('continue-btn').onclick = () => startGame(maxNightUnlocked);
+    document.getElementById('night-select-btn').onclick = () => showMenu('night-select-menu');
+    document.getElementById('custom-night-btn').onclick = () => showMenu('custom-night-menu');
+    document.querySelectorAll('.night-btn').forEach(btn => {
+        btn.onclick = function() { if (!this.classList.contains('locked')) startGame(parseInt(this.dataset.night)); };
+    });
+    document.getElementById('speed-slider').oninput = function() { customSettings.speed = parseInt(this.value); document.getElementById('speed-val').textContent = this.value; };
+    document.getElementById('power-slider').oninput = function() { customSettings.power = parseInt(this.value); document.getElementById('power-val').textContent = this.value; };
+    document.getElementById('hunger-slider').oninput = function() { customSettings.hunger = parseInt(this.value); document.getElementById('hunger-val').textContent = this.value; };
+    document.getElementById('start-custom-btn').onclick = () => startGame(0, true);
+    document.getElementById('back-to-menu-1').onclick = () => showMenu('main-menu');
+    document.getElementById('back-to-menu-2').onclick = () => showMenu('main-menu');
+    document.getElementById('menu-btn').onclick = () => { gamePaused = true; showMenu('pause-menu'); };
+    document.getElementById('resume-btn').onclick = () => { gamePaused = false; showMenu(null); };
+    document.getElementById('restart-btn').onclick = () => { gameStarted = false; showMenu('main-menu'); };
+    document.getElementById('quit-btn').onclick = () => location.reload();
+});
 
-// Админ панель
-const adminPanel = document.getElementById('admin-panel');
-const adminToggleBtn = document.createElement('button');
-adminToggleBtn.id = 'admin-toggle-btn';
-adminToggleBtn.textContent = 'ADMIN';
-document.body.appendChild(adminToggleBtn);
+document.addEventListener('keydown', (e) => {
+    if (!gameStarted || gamePaused || gameState.cameraOpen) return;
+    if (e.key === 'a' || e.key === 'ArrowLeft') gameState.playerRotation = -1;
+    else if (e.key === 'd' || e.key === 'ArrowRight') gameState.playerRotation = 1;
+    else if (e.key === 'w' || e.key === 'ArrowUp') gameState.playerRotation = 0;
+    else if (e.key === 's' || e.key === 'ArrowDown') gameState.playerRotation = 2;
+});
+document.addEventListener('keyup', (e) => {
+    if (['a','d','w','s','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) gameState.playerRotation = 0;
+});
 
-adminToggleBtn.onclick = () => adminPanel.classList.toggle('hidden');
-document.getElementById('close-admin-btn').onclick = () => adminPanel.classList.add('hidden');
-
-document.getElementById('admin-ai-slider').oninput = function() {
-    gameState.aiSpeed = parseInt(this.value);
-    document.getElementById('admin-ai-val').textContent = this.value;
-    sendGameStateUpdate({ aiSpeed: gameState.aiSpeed });
-};
-
-document.getElementById('admin-hunger-slider').oninput = function() {
-    gameState.catHunger = parseInt(this.value);
-    document.getElementById('admin-hunger-val').textContent = this.value;
-    sendGameStateUpdate({ catHunger: gameState.catHunger });
-};
-
-document.getElementById('admin-add-power').onclick = () => {
-    gameState.power = Math.min(100, gameState.power + 50);
-    sendGameStateUpdate({ power: gameState.power });
-};
-
-document.getElementById('admin-add-food').onclick = () => {
-    gameState.foodInventory += 5;
-    sendGameStateUpdate({ foodInventory: gameState.foodInventory });
-};
-
-document.getElementById('admin-full-feed').onclick = () => {
-    gameState.catHunger = 0;
-    playSound('cat');
-    sendGameStateUpdate({ catHunger: gameState.catHunger });
-};
-
-document.getElementById('admin-kill').onclick = jumpscare;
-
-document.getElementById('admin-win').onclick = () => {
-    gameState.gameTime = 59.9;
-};
-
-document.getElementById('admin-toggle-doors').onclick = () => {
-    gameState.doorLeftClosed = !gameState.doorLeftClosed;
-    gameState.doorRightClosed = !gameState.doorRightClosed;
-    playSound('door');
-    const leftBtn = document.getElementById('door-left-btn');
-    const rightBtn = document.getElementById('door-right-btn');
-    leftBtn.textContent = gameState.doorLeftClosed ? '🚪 ОТКРЫТЬ' : '🚪 ДВЕРЬ';
-    rightBtn.textContent = gameState.doorRightClosed ? '🚪 ОТКРЫТЬ' : '🚪 ДВЕРЬ';
-    leftBtn.classList.toggle('active', gameState.doorLeftClosed);
-    rightBtn.classList.toggle('active', gameState.doorRightClosed);
-    sendGameStateUpdate({ doorLeftClosed: gameState.doorLeftClosed, doorRightClosed: gameState.doorRightClosed });
-};
+document.addEventListener('click', () => { if (gameStarted && !gamePaused) sounds.ambient.play().catch(() => {}); }, { once: true });

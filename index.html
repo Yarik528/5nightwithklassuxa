@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>5 Ночей с Классухой</title>
+    <title>TestApp</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,6 +11,8 @@
     <div id="multiplayer-menu" class="menu-screen">
         <h1 class="game-title">5 НОЧЕЙ С КЛАССУХОЙ</h1>
         <div class="menu-buttons">
+            <input type="text" id="nickname-input" placeholder="Твой никнейм" value="Player1" 
+                   style="padding: 15px; font-size: 18px; font-family: 'Press Start 2P'; margin-bottom: 20px; width: 300px; text-align: center;">
             <input type="text" id="room-input" placeholder="Название комнаты" value="room1" 
                    style="padding: 15px; font-size: 18px; font-family: 'Press Start 2P'; margin-bottom: 20px; width: 300px; text-align: center;">
             <input type="password" id="password-input" placeholder="Пароль (необязательно)" 
@@ -21,6 +23,18 @@
         </div>
         <div id="room-info" style="color: #888; margin-top: 20px; font-size: 12px;"></div>
         <div id="connection-status" style="color: #f00; margin-top: 20px; font-size: 14px;">⏳ Подключение...</div>
+    </div>
+
+    <!-- МОДАЛКА ВХОДА В АДМИНКУ -->
+    <div id="admin-login-modal" class="modal-overlay hidden">
+        <div class="modal-box">
+            <h3>🔐 ВХОД В АДМИНКУ</h3>
+            <p>Введите пароль администратора</p>
+            <input type="password" id="admin-pass-input" placeholder="Пароль" 
+                   style="padding: 10px; font-family: 'Press Start 2P'; margin: 20px 0; width: 200px; text-align: center;">
+            <button class="menu-btn" id="admin-login-btn">ВОЙТИ</button>
+            <button class="menu-btn back-btn" id="admin-cancel-login-btn">ОТМЕНА</button>
+        </div>
     </div>
 
     <!-- МОДАЛКА ОШИБКИ -->
@@ -82,6 +96,7 @@
                 <div id="night-display">НОЧЬ 1</div>
                 <div id="cat-status">🐱 КОТ: СЫТ</div>
                 <div id="multiplayer-indicator" style="position: absolute; top: 10px; left: 10px; font-size: 12px; color: #0f0;">🟢 Онлайн</div>
+                <div id="player-nickname-display" style="position: absolute; top: 10px; right: 10px; font-size: 12px; color: #ff0;">👤 Player1</div>
             </div>
             <div id="controls-left">
                 <button id="door-left-btn" class="control-btn">🚪 ДВЕРЬ</button>
@@ -106,6 +121,20 @@
                 </div>
             </div>
             <button id="menu-btn" class="menu-btn-small">☰ МЕНЮ</button>
+            <button id="chat-toggle-btn" class="menu-btn-small" style="top: 60px;">💬 ЧАТ</button>
+        </div>
+    </div>
+
+    <!-- ЧАТ В ИГРЕ -->
+    <div id="game-chat" class="hidden">
+        <div id="chat-header">
+            <span>📜 ЧАТ КОМНАТЫ</span>
+            <button id="close-chat-btn">✖</button>
+        </div>
+        <div id="chat-messages"></div>
+        <div id="chat-input-area">
+            <input type="text" id="chat-message-input" placeholder="Введите сообщение...">
+            <button id="send-chat-btn">➤</button>
         </div>
     </div>
 
@@ -117,30 +146,48 @@
         <button class="menu-btn" id="quit-btn">🚪 ВЫЙТИ</button>
     </div>
 
-    <!-- АДМИН ПАНЕЛЬ -->
+    <!-- ПОЛНАЯ АДМИН ПАНЕЛЬ -->
     <div id="admin-panel" class="hidden">
-        <div class="admin-content">
-            <h2>🛠️ АДМИН ПАНЕЛЬ</h2>
-            <div class="admin-section">
-                <h3>Сложность</h3>
-                <label>AI Скорость: <span id="admin-ai-val">5</span></label>
-                <input type="range" id="admin-ai-slider" min="0" max="20" value="5">
-                <label>Голод кота: <span id="admin-hunger-val">0</span></label>
-                <input type="range" id="admin-hunger-slider" min="0" max="100" value="0">
+        <div class="admin-content full-admin">
+            <div class="admin-header">
+                <h2>🛠️ ПАНЕЛЬ УПРАВЛЕНИЯ СЕРВЕРОМ</h2>
+                <button class="close-admin" id="close-admin-btn">✖</button>
             </div>
-            <div class="admin-section">
-                <h3>Ресурсы</h3>
-                <button class="admin-btn" id="admin-add-power">⚡ +50 Энергии</button>
-                <button class="admin-btn" id="admin-add-food">🍕 +5 Еды</button>
-                <button class="admin-btn" id="admin-full-feed">🐱 Накормить кота</button>
+            <div class="admin-grid">
+                <!-- СПИСОК КОМНАТ -->
+                <div class="admin-section rooms-list">
+                    <h3>📡 АКТИВНЫЕ КОМНАТЫ</h3>
+                    <button class="admin-btn" id="refresh-rooms-btn">🔄 ОБНОВИТЬ</button>
+                    <div id="rooms-container"></div>
+                </div>
+                <!-- УПРАВЛЕНИЕ ВЫБРАННОЙ КОМНАТОЙ -->
+                <div class="admin-section room-controls hidden" id="active-room-controls">
+                    <h3 id="current-room-name">КОМНАТА: -</h3>
+                    <div id="room-players-list">
+                        <h4>👥 ИГРОКИ:</h4>
+                        <div id="players-list"></div>
+                    </div>
+                    <div class="admin-actions">
+                        <h4>⚡ БЫСТРЫЕ ДЕЙСТВИЯ:</h4>
+                        <button class="admin-btn" onclick="adminAction('toggle-doors')">🚪 Переключить двери</button>
+                        <button class="admin-btn danger" onclick="adminAction('jumpscare')">💀 Вызвать скример</button>
+                        <button class="admin-btn success" onclick="adminAction('win')">🏆 Мгновенная победа</button>
+                        <button class="admin-btn" onclick="adminAction('add-power')">⚡ +50 Энергии</button>
+                        <button class="admin-btn" onclick="adminAction('feed-cat')">🐱 Накормить кота</button>
+                    </div>
+                    <div class="admin-settings">
+                        <h4>⚙️ НАСТРОЙКИ:</h4>
+                        <label>Сложность AI: <span id="admin-ai-val">5</span></label>
+                        <input type="range" id="admin-ai-slider" min="1" max="20" value="5">
+                        <label>Голод кота: <span id="admin-hunger-val">0</span></label>
+                        <input type="range" id="admin-hunger-slider" min="0" max="100" value="0">
+                    </div>
+                    <div class="chat-box">
+                        <h4>📜 ЛОГИ И ЧАТ:</h4>
+                        <div id="chat-log"></div>
+                    </div>
+                </div>
             </div>
-            <div class="admin-section">
-                <h3>Управление</h3>
-                <button class="admin-btn danger" id="admin-kill">💀 Вызвать скример</button>
-                <button class="admin-btn success" id="admin-win">🏆 Победа (6 AM)</button>
-                <button class="admin-btn" id="admin-toggle-doors">🚪 Переключить двери</button>
-            </div>
-            <button class="admin-btn close-admin" id="close-admin-btn">❌ ЗАКРЫТЬ</button>
         </div>
     </div>
 
